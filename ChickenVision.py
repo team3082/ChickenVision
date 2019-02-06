@@ -169,12 +169,12 @@ verticalView = math.atan(math.tan(diagonalView/2) * (verticalAspect / diagonalAs
 H_FOCAL_LENGTH = image_width / (2*math.tan((horizontalView/2)))
 V_FOCAL_LENGTH = image_height / (2*math.tan((verticalView/2)))
 #blurs have to be odd
-green_blur = 7
+green_blur = 1
 orange_blur = 27
 
 # define range of green of retroreflective tape in HSV
-lower_green = np.array([0,220,25])
-upper_green = np.array([101, 255, 255])
+lower_green = np.array([67.9856,82.55395,68.75496])
+upper_green = np.array([95.151515, 255, 255])
 #define range of orange from cargo ball in HSV
 lower_orange = np.array([0,193,92])
 upper_orange = np.array([23, 255, 255])
@@ -351,7 +351,7 @@ def findTape(contours, image, centerX, centerY):
     screenHeight, screenWidth, channels = image.shape;
     #Seen vision targets (correct angle, adjacent to each other)
     targets = []
-
+    centers = []
     if len(contours) >= 2:
         #Sort contours by area size (biggest to smallest)
         cntsSorted = sorted(contours, key=lambda x: cv2.contourArea(x), reverse=True)
@@ -368,13 +368,15 @@ def findTape(contours, image, centerX, centerY):
             hullArea = cv2.contourArea(hull)
             # Filters contours based off of size
             if (checkContours(cntArea, hullArea)):
-                ### MOSTLY DRAWING CODE, BUT CALCULATES IMPORTANT INFO ###
+                ### MOSTLY DRAWING CODE BUT CALCULATES IMPORTANT INFO ###
                 # Gets the centeroids of contour
                 if M["m00"] != 0:
                     cx = int(M["m10"] / M["m00"])
                     cy = int(M["m01"] / M["m00"])
+                    centers.append(cx)
                 else:
                     cx, cy = 0, 0
+
                 if(len(biggestCnts) < 13):
                     #### CALCULATES ROTATION OF CONTOUR BY FITTING ELLIPSE ##########
                     rotation = getEllipseRotation(image, cnt)
@@ -480,6 +482,13 @@ def findTape(contours, image, centerX, centerY):
     else:
         # pushes that it deosn't see vision target to network tables
         networkTable.putBoolean("tapeDetected", False)
+    
+    if (len(centers) > 0):
+        averageX = (centers[0] + centers[1] if len(centers) > 1 else 0) / 2  
+        networkTable.putNumber("tapeCenterX", averageX)
+
+
+    
 
     cv2.line(image, (round(centerX), screenHeight), (round(centerX), 0), (255, 255, 255), 2)
 
