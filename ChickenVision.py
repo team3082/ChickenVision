@@ -30,35 +30,35 @@ import datetime
 
 #Class to examine Frames per second of camera stream. Currently not used.
 class FPS:
-	def __init__(self):
-		# store the start time, end time, and total number of frames
-		# that were examined between the start and end intervals
-		self._start = None
-		self._end = None
-		self._numFrames = 0
+    def __init__(self):
+        # store the start time, end time, and total number of frames
+        # that were examined between the start and end intervals
+        self._start = None
+        self._end = None
+        self._numFrames = 0
 
-	def start(self):
-		# start the timer
-		self._start = datetime.datetime.now()
-		return self
+    def start(self):
+        # start the timer
+        self._start = datetime.datetime.now()
+        return self
 
-	def stop(self):
-		# stop the timer
-		self._end = datetime.datetime.now()
+    def stop(self):
+        # stop the timer
+        self._end = datetime.datetime.now()
 
-	def update(self):
-		# increment the total number of frames examined during the
-		# start and end intervals
-		self._numFrames += 1
+    def update(self):
+        # increment the total number of frames examined during the
+        # start and end intervals
+        self._numFrames += 1
 
-	def elapsed(self):
-		# return the total number of seconds between the start and
-		# end interval
-		return (self._end - self._start).total_seconds()
+    def elapsed(self):
+        # return the total number of seconds between the start and
+        # end interval
+        return (self._end - self._start).total_seconds()
 
-	def fps(self):
-		# compute the (approximate) frames per second
-		return self._numFrames / self.elapsed()
+    def fps(self):
+        # compute the (approximate) frames per second
+        return self._numFrames / self.elapsed()
 
 
 # class that runs separate thread for showing video,
@@ -225,7 +225,10 @@ def findTargets(frame, mask):
         networkTable.putBoolean("tapeDetected", False)
 
     # Shows the contours overlayed on the original video
-    return image
+    if networkTable.getBoolean("tapeMask", False):
+        return image
+    else:
+        return cv2.bitwise_and(image, image, mask = mask)
 
 # Finds the balls from the masked image and displays them on original stream + network tables
 def findCargo(frame, mask):
@@ -432,7 +435,8 @@ def findTape(contours, image, centerX, centerY):
 
                     cv2.circle(image, center, radius, (23, 184, 80), 1)
                     
-
+                    dist = rect[1][0]
+                    
                     #get height of tape for angle of face
                     ellipse = cv2.fitEllipse(cnt)
                     heightE = ellipse[1][1] * ellipse[1][0]
@@ -440,9 +444,9 @@ def findTape(contours, image, centerX, centerY):
 
                     # Appends important info to array
                     if not biggestCnts:
-                         biggestCnts.append([cx, cy, rotation, heightE])
+                         biggestCnts.append([cx, cy, rotation, heightE, dist])
                     elif [cx, cy, rotation] not in biggestCnts:
-                         biggestCnts.append([cx, cy, rotation, heightE])
+                         biggestCnts.append([cx, cy, rotation, heightE, dist])
 
 
         # Sorts array based on coordinates (leftmost to rightmost) to make sure contours are adjacent
@@ -490,13 +494,15 @@ def findTape(contours, image, centerX, centerY):
                 else:
                     hRatio = (ch2 / ch1) - 1
 
+                averageDist = (biggestCnts[i][4] + biggestCnts[i+1][4]) / 2
+
                 #Angle from center of camera to target (what you should pass into gyro)
                 yawToTarget = calculateYaw(centerOfTarget, centerX, H_FOCAL_LENGTH)
                 #Make sure no duplicates, then append
                 if not targets:
-                    targets.append([centerOfTarget, yawToTarget, hRatio])
+                    targets.append([centerOfTarget, yawToTarget, hRatio, averageDist])
                 elif [centerOfTarget, yawToTarget] not in targets:
-                    targets.append([centerOfTarget, yawToTarget, hRatio])
+                    targets.append([centerOfTarget, yawToTarget, hRatio, averageDist])
     #Check if there are targets seen
     if (len(targets) > 0):
         # pushes that it sees vision target to network tables
@@ -506,13 +512,17 @@ def findTape(contours, image, centerX, centerY):
         finalTarget = min(targets, key=lambda x: math.fabs(x[1]))
         # Puts the yaw on screen
         #Draws yaw of target + line where center of target is
-        cv2.putText(image, "Yaw: " + str(finalTarget[1]), (40, 40), cv2.FONT_HERSHEY_COMPLEX, .6,
+        cv2.putText(image, "X: " + str(finalTarget[1]), (40, 40), cv2.FONT_HERSHEY_COMPLEX, .6,
                     (255, 255, 255))
-        cv2.putText(image, "R: " + str(finalTarget[2]), (40, 20), cv2.FONT_HERSHEY_COMPLEX, .6,
+        cv2.putText(image, "Rot: " + str(finalTarget[2]), (40, 20), cv2.FONT_HERSHEY_COMPLEX, .6,
                     (255, 0, 255))
+        cv2.putText(image, "Dist: " + str(838 / finalTarget[3]), (40, 60), cv2.FONT_HERSHEY_COMPLEX, .6,
+                    (0, 255, 255))
         cv2.line(image, (finalTarget[0], screenHeight), (finalTarget[0], 0), (255, 0, 0), 2)
         cv2.line(image, (0, int(screenHeight / 2 + finalTarget[2] * 10) ), (screenWidth, int(screenHeight / 2 + finalTarget[2] * 10) ), (0, 0, 255), 2)
 
+        
+        networkTable.putNumber("tapeDist", 838 / finalTarget[3])
         
         networkTable.putNumber("tapeFace", finalTarget[2])
 
@@ -755,6 +765,9 @@ if __name__ == "__main__":
     tape = False
     fps = FPS().start()
     #TOTAL_FRAMES = 200;
+    networkTable.putBoolean("Driver", False)
+    networkTable.putBoolean("Tape", True)
+    networkTable.putBoolean("tapeMask", False)
     # loop forever
     while True:
 
@@ -802,7 +815,3 @@ if __name__ == "__main__":
     fps.stop()
     print("[INFO] elasped time: {:.2f}".format(fps.elapsed()))
     print("[INFO] approx. FPS: {:.2f}".format(fps.fps()))
-
-
-
-
